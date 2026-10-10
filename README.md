@@ -21,3 +21,8 @@ in the first version.
 - **Server**: the hq server. It receives messages from agents and serves
   them to the app. It is multi-tenant, so one server hosts many tenants.
 - **CLI**: the tool agents run to report messages to the hq server.
+
+## Concepts
+
+- **User**: a person who uses hq. The server has users, and users read
+  agents' messages in the app.
