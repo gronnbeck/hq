@@ -9,7 +9,8 @@ you use to see and interact with them.
 ## First version
 
 The first version lets agents send messages to hq, and users read those
-messages in the app.
+messages in the app. Agents send messages with the hq CLI, which reports
+them to the hq server.
 
 Messages go one way only, from agents to users. Users can't reply to agents
 in the first version.
@@ -17,4 +18,6 @@ in the first version.
 ## Parts
 
 - **App**: the native frontend. iOS is the first target.
-- **Server**: where the agents run.
+- **Server**: the hq server. It receives messages from agents and serves
+  them to the app.
+- **CLI**: the tool agents run to report messages to the hq server.
