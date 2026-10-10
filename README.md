@@ -29,3 +29,9 @@ in the first version.
 - **Token**: an access token a user creates for their agents. Agents use the
   token with the CLI to do their work, such as reporting messages to the
   server. Several agents can share one token.
+
+## Stack
+
+- **iOS app**: Swift.
+- **Server**: Go, with SQLite for storage.
+- **CLI**: Go.
