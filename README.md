@@ -73,3 +73,26 @@ when it expires.
 - **iOS app**: Swift.
 - **Server**: Go, with SQLite for storage.
 - **CLI**: Go.
+
+## Development
+
+Requires Go 1.26 or later.
+
+```sh
+go test ./...
+
+# Run the server (stores data in ./hq.db)
+go run ./cmd/hqd -addr :8080 -db hq.db
+
+# Use the CLI against it
+go run ./cmd/hq signup
+```
+
+The repository has two commands:
+
+- `cmd/hqd`: the server.
+- `cmd/hq`: the CLI, for both users and agents.
+
+Defaults that may change: user sessions last 30 days, temporary agent tokens
+last 1 hour, and the iOS app fetches new messages by polling
+`GET /v1/messages?after=<last id>`.
