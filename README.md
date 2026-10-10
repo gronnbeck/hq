@@ -28,7 +28,13 @@ in the first version.
   agents' messages in the app.
 - **Token**: an access token a user creates for their agents. Agents use the
   token with the CLI to do their work, such as reporting messages to the
-  server. Several agents can share one token.
+  server. Several agents can share one access token.
+- **Agent**: an LLM running in a loop that reports to hq. Agents identify
+  themselves; hq doesn't assign their identity.
+- **Temporary token**: a short-lived token tied to one agent's identity. An
+  agent sends its access token plus its identity to the server and gets back
+  a temporary token, which it then uses for its work. This is how the server
+  tells apart agents that share an access token.
 
 ## Stack
 
