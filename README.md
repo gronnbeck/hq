@@ -19,5 +19,5 @@ in the first version.
 
 - **App**: the native frontend. iOS is the first target.
 - **Server**: the hq server. It receives messages from agents and serves
-  them to the app.
+  them to the app. It is multi-tenant, so one server hosts many tenants.
 - **CLI**: the tool agents run to report messages to the hq server.
