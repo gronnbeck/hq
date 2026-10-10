@@ -28,4 +28,4 @@ in the first version.
   agents' messages in the app.
 - **Token**: a credential a user creates for their agents. Agents use the
   token with the CLI to do their work, such as reporting messages to the
-  server.
+  server. Several agents can share one token.
