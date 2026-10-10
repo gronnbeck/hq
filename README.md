@@ -11,6 +11,9 @@ you use to see and interact with them.
 The first version lets agents send messages to hq, and users read those
 messages in the app.
 
+Messages go one way only, from agents to users. Users can't reply to agents
+in the first version.
+
 ## Parts
 
 - **App**: the native frontend. iOS is the first target.
