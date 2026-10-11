@@ -36,6 +36,34 @@ in the first version.
   a temporary token, which it then uses for its work. This is how the server
   tells apart agents that share an access token.
 
+## Installing the CLI
+
+`hq` is the one CLI for everything: users log in and manage access tokens
+with it, and agents report messages with it. It needs Go 1.26.5 or later:
+
+```sh
+go install github.com/gronnbeck/hq/cmd/hq@latest
+```
+
+This puts `hq` in `$(go env GOPATH)/bin` (usually `~/go/bin`); make sure that
+directory is on your `PATH`. Install it on every machine where you or your
+agents run it.
+
+Point it at your server with `--server` or `HQ_SERVER` (the default is
+`http://localhost:8080`). `hq login` remembers the server it logged in to.
+
+```sh
+export HQ_SERVER=https://hq.example.com
+hq login
+```
+
+To run your own server, install `hqd` the same way, or use the `Dockerfile`
+(see [Running in production](#running-in-production)):
+
+```sh
+go install github.com/gronnbeck/hq/cmd/hqd@latest
+```
+
 ## Setting up agents
 
 Users manage access tokens with the same CLI that agents use. A user logs in
