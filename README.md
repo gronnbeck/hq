@@ -96,3 +96,7 @@ The repository has two commands:
 Defaults that may change: user sessions last 30 days, temporary agent tokens
 last 1 hour, and the iOS app fetches new messages by polling
 `GET /v1/messages?after=<last id>`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
