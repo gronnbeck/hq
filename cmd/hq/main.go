@@ -33,18 +33,21 @@ User commands:
   hq tokens list                  list access tokens
   hq tokens revoke NAME           revoke an access token
   hq messages [--follow]          show messages from agents
+  hq config                       show the config file and current settings
 
 Admin commands (need HQ_ADMIN_TOKEN):
   hq users create --email EMAIL   create a user; reads the password like login
 
 Agent commands:
-  hq report --as AGENT MESSAGE    send a message to the token's user
+  hq report [--as AGENT] MESSAGE  send a message to the token's user
                                   (MESSAGE "-" reads it from stdin)
 
 Global flags:
   --server URL                    hq server (or HQ_SERVER; default ` + defaultServer + `)
 
 Agents pass their access token in HQ_TOKEN.
+
+Defaults live in ~/.config/hq/config.yaml, which hq creates on first run.
 `
 
 func main() {
@@ -73,25 +76,31 @@ func run(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("read config: %w", err)
 	}
-	server := firstNonEmpty(*serverFlag, os.Getenv("HQ_SERVER"), cfg.Server, defaultServer)
+	sess, err := loadSession()
+	if err != nil {
+		return fmt.Errorf("read session: %w", err)
+	}
+	server := strings.TrimRight(firstNonEmpty(*serverFlag, os.Getenv("HQ_SERVER"), cfg.Server, defaultServer), "/")
 	c := &client.Client{BaseURL: server, HTTP: &http.Client{Timeout: 30 * time.Second}}
 
 	cmd, args := args[0], args[1:]
 	switch cmd {
 	case "signup":
-		return authenticate(ctx, c, cfg, args, true)
+		return authenticate(ctx, c, args, true)
 	case "login":
-		return authenticate(ctx, c, cfg, args, false)
+		return authenticate(ctx, c, args, false)
 	case "logout":
-		return logout(ctx, c, cfg)
+		return logout(ctx, c, sess)
 	case "tokens":
-		return tokens(ctx, c, cfg, args)
+		return tokens(ctx, c, sess, args)
 	case "messages":
-		return messages(ctx, c, cfg, args)
+		return messages(ctx, c, sess, args)
 	case "users":
 		return users(ctx, c, args)
 	case "report":
-		return report(ctx, c, args)
+		return report(ctx, c, cfg, args)
+	case "config":
+		return showConfig(c, cfg, sess)
 	case "help", "-h", "--help":
 		global.Usage()
 		return nil
@@ -99,7 +108,7 @@ func run(ctx context.Context, args []string) error {
 	return fmt.Errorf("unknown command %q; run hq help", cmd)
 }
 
-func authenticate(ctx context.Context, c *client.Client, cfg config, args []string, signup bool) error {
+func authenticate(ctx context.Context, c *client.Client, args []string, signup bool) error {
 	fs := flag.NewFlagSet("login", flag.ContinueOnError)
 	email := fs.String("email", "", "account email")
 	if err := fs.Parse(args); err != nil {
@@ -134,34 +143,34 @@ func authenticate(ctx context.Context, c *client.Client, cfg config, args []stri
 	if err != nil {
 		return err
 	}
-	cfg.Server, cfg.Session = c.BaseURL, sess.Token
-	if err := saveConfig(cfg); err != nil {
+	if err := saveSession(session{Server: c.BaseURL, Token: sess.Token}); err != nil {
 		return fmt.Errorf("save session: %w", err)
 	}
 	fmt.Printf("Logged in to %s as %s.\n", c.BaseURL, *email)
 	return nil
 }
 
-func logout(ctx context.Context, c *client.Client, cfg config) error {
-	if cfg.Session == "" {
+func logout(ctx context.Context, c *client.Client, sess session) error {
+	if sess.Token == "" {
 		fmt.Println("Not logged in.")
 		return nil
 	}
-	c.Token = cfg.Session
+	// Log out of the server the session belongs to, whatever the current
+	// default is.
+	c.BaseURL, c.Token = sess.Server, sess.Token
 	var apiErr *client.Error
 	if err := c.Logout(ctx); err != nil && !(errors.As(err, &apiErr) && apiErr.Status == http.StatusUnauthorized) {
 		return err
 	}
-	cfg.Session = ""
-	if err := saveConfig(cfg); err != nil {
+	if err := deleteSession(); err != nil {
 		return err
 	}
 	fmt.Println("Logged out.")
 	return nil
 }
 
-func tokens(ctx context.Context, c *client.Client, cfg config, args []string) error {
-	if err := useSession(c, cfg); err != nil {
+func tokens(ctx context.Context, c *client.Client, sess session, args []string) error {
+	if err := useSession(c, sess); err != nil {
 		return err
 	}
 	if len(args) == 0 {
@@ -236,13 +245,13 @@ func users(ctx context.Context, c *client.Client, args []string) error {
 	return nil
 }
 
-func messages(ctx context.Context, c *client.Client, cfg config, args []string) error {
+func messages(ctx context.Context, c *client.Client, sess session, args []string) error {
 	fs := flag.NewFlagSet("messages", flag.ContinueOnError)
 	follow := fs.Bool("follow", false, "keep waiting for new messages")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if err := useSession(c, cfg); err != nil {
+	if err := useSession(c, sess); err != nil {
 		return err
 	}
 	const pageSize = 500
@@ -273,14 +282,15 @@ func messages(ctx context.Context, c *client.Client, cfg config, args []string) 
 	}
 }
 
-func report(ctx context.Context, c *client.Client, args []string) error {
+func report(ctx context.Context, c *client.Client, cfg config, args []string) error {
 	fs := flag.NewFlagSet("report", flag.ContinueOnError)
-	agent := fs.String("as", "", "the agent's identity")
+	agentFlag := fs.String("as", "", "the agent's identity")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *agent == "" {
-		return errors.New("--as is required: agents identify themselves")
+	agent := firstNonEmpty(*agentFlag, os.Getenv("HQ_AGENT"), cfg.Agent)
+	if agent == "" {
+		return errors.New("agents identify themselves: pass --as, set HQ_AGENT, or set agent in the config")
 	}
 	accessToken := os.Getenv("HQ_TOKEN")
 	if accessToken == "" {
@@ -298,7 +308,7 @@ func report(ctx context.Context, c *client.Client, args []string) error {
 		return errors.New("usage: hq report --as AGENT MESSAGE")
 	}
 
-	tok, err := agentToken(ctx, c, accessToken, *agent, false)
+	tok, err := agentToken(ctx, c, accessToken, agent, false)
 	if err != nil {
 		return err
 	}
@@ -307,7 +317,7 @@ func report(ctx context.Context, c *client.Client, args []string) error {
 	var apiErr *client.Error
 	if errors.As(err, &apiErr) && apiErr.Status == http.StatusUnauthorized {
 		// The cached token was revoked or expired early; get a new one once.
-		if tok, err = agentToken(ctx, c, accessToken, *agent, true); err != nil {
+		if tok, err = agentToken(ctx, c, accessToken, agent, true); err != nil {
 			return err
 		}
 		c.Token = tok
@@ -338,11 +348,32 @@ func agentToken(ctx context.Context, c *client.Client, accessToken, agent string
 	return t.Token, nil
 }
 
-func useSession(c *client.Client, cfg config) error {
-	if cfg.Session == "" {
-		return errors.New("not logged in; run hq login")
+// useSession authenticates c as the logged-in user. It refuses when the
+// session belongs to another server, so the token never leaves for one.
+func useSession(c *client.Client, sess session) error {
+	if sess.Token == "" {
+		return fmt.Errorf("not logged in to %s; run hq login", c.BaseURL)
 	}
-	c.Token = cfg.Session
+	if sess.Server != c.BaseURL {
+		return fmt.Errorf("logged in to %s, not %s; run hq login to switch", sess.Server, c.BaseURL)
+	}
+	c.Token = sess.Token
+	return nil
+}
+
+func showConfig(c *client.Client, cfg config, sess session) error {
+	p, err := configPath()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Config file: %s\n", p)
+	fmt.Printf("Server:      %s\n", c.BaseURL)
+	fmt.Printf("Agent:       %s\n", firstNonEmpty(os.Getenv("HQ_AGENT"), cfg.Agent, "(not set)"))
+	if sess.Token == "" {
+		fmt.Println("Logged in:   no")
+	} else {
+		fmt.Printf("Logged in:   to %s\n", sess.Server)
+	}
 	return nil
 }
 

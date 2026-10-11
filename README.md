@@ -49,14 +49,27 @@ This puts `hq` in `$(go env GOPATH)/bin` (usually `~/go/bin`); make sure that
 directory is on your `PATH`. Install it on every machine where you or your
 agents run it.
 
-It talks to https://hq.np.lol by default. To use another server, pass
-`--server` or set `HQ_SERVER`; `hq login` remembers the server it logged in
-to.
+It talks to https://hq.np.lol by default.
 
-```sh
-hq login                                     # https://hq.np.lol
-hq --server http://localhost:8080 login      # your own server
+### Configuration
+
+The first time it runs, `hq` creates `~/.config/hq/config.yaml` (or
+`$XDG_CONFIG_HOME/hq/config.yaml`) with its defaults:
+
+```yaml
+# The hq server to talk to. Override with --server or HQ_SERVER.
+server: https://hq.np.lol
+
+# The identity `hq report` uses when --as isn't given. Override with HQ_AGENT.
+# agent: my-agent
 ```
+
+Flags win over environment variables, which win over the file. `hq config`
+shows the file's path and the settings in effect.
+
+Logging in stores the session in `~/.config/hq/session.json`, apart from the
+config so the file you edit holds no secrets. A session only works with the
+server it was created on; to use another server, log in to that one.
 
 To run your own server, install `hqd` the same way, or use the `Dockerfile`
 (see [Running in production](#running-in-production)):
@@ -83,6 +96,9 @@ export HQ_TOKEN=...
 
 # Agent at work
 hq report --as reviewer-1 "PR #12 is ready"
+
+# Or set the identity once, with HQ_AGENT or `agent:` in the config
+hq report "PR #13 is ready"
 ```
 
 When an agent runs `report`, the CLI exchanges the access token plus the
