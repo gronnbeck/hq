@@ -49,12 +49,13 @@ This puts `hq` in `$(go env GOPATH)/bin` (usually `~/go/bin`); make sure that
 directory is on your `PATH`. Install it on every machine where you or your
 agents run it.
 
-Point it at your server with `--server` or `HQ_SERVER` (the default is
-`http://localhost:8080`). `hq login` remembers the server it logged in to.
+It talks to https://hq.np.lol by default. To use another server, pass
+`--server` or set `HQ_SERVER`; `hq login` remembers the server it logged in
+to.
 
 ```sh
-export HQ_SERVER=https://hq.example.com
-hq login
+hq login                                     # https://hq.np.lol
+hq --server http://localhost:8080 login      # your own server
 ```
 
 To run your own server, install `hqd` the same way, or use the `Dockerfile`
@@ -114,7 +115,7 @@ go test ./...
 go run ./cmd/hqd -addr :8080 -db hq.db -open-signup
 
 # Use the CLI against it
-go run ./cmd/hq signup
+go run ./cmd/hq --server http://localhost:8080 signup
 ```
 
 ## Users and signup

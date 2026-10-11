@@ -21,7 +21,7 @@ import (
 	"github.com/gronnbeck/hq/internal/client"
 )
 
-const defaultServer = "http://localhost:8080"
+const defaultServer = "https://hq.np.lol"
 
 const usage = `hq is the CLI for hq.
 
