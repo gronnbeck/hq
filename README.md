@@ -81,12 +81,32 @@ Requires Go 1.26 or later.
 ```sh
 go test ./...
 
-# Run the server (stores data in ./hq.db)
-go run ./cmd/hqd -addr :8080 -db hq.db
+# Run the server (stores data in ./hq.db). -open-signup lets anyone create
+# an account, which is handy locally.
+go run ./cmd/hqd -addr :8080 -db hq.db -open-signup
 
 # Use the CLI against it
 go run ./cmd/hq signup
 ```
+
+## Users and signup
+
+Signup is closed by default: only an admin can create users. Start `hqd` with
+an admin token in `HQ_ADMIN_TOKEN`, then create users with the CLI:
+
+```sh
+HQ_ADMIN_TOKEN=... hq --server https://hq.example.com users create --email ada@example.com
+```
+
+Pass `-open-signup` to let anyone create an account with `hq signup`.
+
+## Running in production
+
+The `Dockerfile` builds a small static image. It listens on port 8080, keeps
+the SQLite database in `/data` (mount a volume there), reads the admin token
+from `HQ_ADMIN_TOKEN`, and answers health checks on `GET /up`.
+
+## Layout
 
 The repository has two commands:
 

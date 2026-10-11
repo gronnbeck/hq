@@ -34,6 +34,9 @@ User commands:
   hq tokens revoke NAME           revoke an access token
   hq messages [--follow]          show messages from agents
 
+Admin commands (need HQ_ADMIN_TOKEN):
+  hq users create --email EMAIL   create a user; reads the password like login
+
 Agent commands:
   hq report --as AGENT MESSAGE    send a message to the token's user
                                   (MESSAGE "-" reads it from stdin)
@@ -85,6 +88,8 @@ func run(ctx context.Context, args []string) error {
 		return tokens(ctx, c, cfg, args)
 	case "messages":
 		return messages(ctx, c, cfg, args)
+	case "users":
+		return users(ctx, c, args)
 	case "report":
 		return report(ctx, c, args)
 	case "help", "-h", "--help":
@@ -201,6 +206,34 @@ func tokens(ctx context.Context, c *client.Client, cfg config, args []string) er
 	default:
 		return fmt.Errorf("unknown tokens command %q", sub)
 	}
+}
+
+func users(ctx context.Context, c *client.Client, args []string) error {
+	if len(args) == 0 || args[0] != "create" {
+		return errors.New("usage: hq users create --email EMAIL")
+	}
+	fs := flag.NewFlagSet("users create", flag.ContinueOnError)
+	email := fs.String("email", "", "the new user's email")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *email == "" {
+		return errors.New("--email is required")
+	}
+	c.Token = os.Getenv("HQ_ADMIN_TOKEN")
+	if c.Token == "" {
+		return errors.New("HQ_ADMIN_TOKEN isn't set")
+	}
+	password, err := readPassword(bufio.NewReader(os.Stdin), "Password for "+*email+": ")
+	if err != nil {
+		return err
+	}
+	u, err := c.CreateUser(ctx, *email, password)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Created user %s on %s.\n", u.Email, c.BaseURL)
+	return nil
 }
 
 func messages(ctx context.Context, c *client.Client, cfg config, args []string) error {

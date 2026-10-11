@@ -19,7 +19,14 @@ import (
 func main() {
 	addr := flag.String("addr", ":8080", "address to listen on")
 	dbPath := flag.String("db", "hq.db", "path to the SQLite database")
+	openSignup := flag.Bool("open-signup", false, "let anyone create an account (for local development)")
 	flag.Parse()
+
+	// The admin token comes from the environment so it stays out of `ps`.
+	adminToken := os.Getenv("HQ_ADMIN_TOKEN")
+	if adminToken == "" && !*openSignup {
+		log.Print("warning: HQ_ADMIN_TOKEN is unset and signup is closed, so no users can be created")
+	}
 
 	st, err := store.Open(*dbPath)
 	if err != nil {
@@ -29,7 +36,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           server.New(st),
+		Handler:           server.New(st, server.Options{AdminToken: adminToken, OpenSignup: *openSignup}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

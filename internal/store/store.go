@@ -85,6 +85,8 @@ func Open(path string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
+func (s *Store) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
+
 type User struct {
 	ID           int64
 	Email        string

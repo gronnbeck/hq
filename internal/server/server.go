@@ -3,6 +3,8 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"log"
@@ -36,14 +38,25 @@ const (
 // response takes as long as a wrong password would.
 var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("hq-dummy-password"), bcrypt.DefaultCost)
 
+type Options struct {
+	// AdminToken, when set, lets its bearer create users. Empty disables
+	// admin access.
+	AdminToken string
+	// OpenSignup lets anyone create an account. Off by default: a public
+	// server should only have users an admin created.
+	OpenSignup bool
+}
+
 type Server struct {
 	store *store.Store
+	opts  Options
 	mux   *http.ServeMux
 }
 
-func New(st *store.Store) *Server {
-	s := &Server{store: st, mux: http.NewServeMux()}
+func New(st *store.Store, opts Options) *Server {
+	s := &Server{store: st, opts: opts, mux: http.NewServeMux()}
 
+	s.mux.HandleFunc("GET /up", s.health)
 	s.mux.HandleFunc("POST /v1/users", s.signup)
 	s.mux.HandleFunc("POST /v1/sessions", s.login)
 	s.mux.HandleFunc("DELETE /v1/sessions/current", s.withUser(s.logout))
@@ -63,7 +76,28 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.Serve
 
 // Handlers.
 
+func (s *Server) health(w http.ResponseWriter, r *http.Request) {
+	if err := s.store.Ping(r.Context()); err != nil {
+		internalError(w, err)
+		return
+	}
+	w.Write([]byte("ok\n"))
+}
+
+// signup creates a user. An admin creating a user gets the user back; someone
+// signing themselves up (only with OpenSignup) is also logged in.
 func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
+	tok, hasToken := bearer(r)
+	asAdmin := hasToken && s.isAdmin(tok)
+	switch {
+	case hasToken && !asAdmin:
+		writeError(w, http.StatusUnauthorized, "invalid admin token")
+		return
+	case !asAdmin && !s.opts.OpenSignup:
+		writeError(w, http.StatusForbidden, "signup is closed; ask an admin to create your account")
+		return
+	}
+
 	var req api.Credentials
 	if !decode(w, r, &req) {
 		return
@@ -92,7 +126,22 @@ func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
+	if asAdmin {
+		writeJSON(w, http.StatusCreated, api.User{Email: email.Address})
+		return
+	}
 	s.startSession(w, r, userID)
+}
+
+// isAdmin compares in constant time so the token can't be guessed byte by
+// byte from response times.
+func (s *Server) isAdmin(tok string) bool {
+	if s.opts.AdminToken == "" {
+		return false
+	}
+	want := sha256.Sum256([]byte(s.opts.AdminToken))
+	got := sha256.Sum256([]byte(tok))
+	return subtle.ConstantTimeCompare(want[:], got[:]) == 1
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {

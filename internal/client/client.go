@@ -37,6 +37,14 @@ func (c *Client) Signup(ctx context.Context, email, password string) (api.Sessio
 	return out, err
 }
 
+// CreateUser creates a user as an admin; the client's token must be the
+// server's admin token.
+func (c *Client) CreateUser(ctx context.Context, email, password string) (api.User, error) {
+	var out api.User
+	err := c.do(ctx, "POST", "/v1/users", api.Credentials{Email: email, Password: password}, &out)
+	return out, err
+}
+
 func (c *Client) Login(ctx context.Context, email, password string) (api.Session, error) {
 	var out api.Session
 	err := c.do(ctx, "POST", "/v1/sessions", api.Credentials{Email: email, Password: password}, &out)

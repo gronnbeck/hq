@@ -8,6 +8,10 @@ type Credentials struct {
 	Password string `json:"password"`
 }
 
+type User struct {
+	Email string `json:"email"`
+}
+
 type Session struct {
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expires_at"`

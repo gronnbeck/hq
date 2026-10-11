@@ -14,13 +14,17 @@ import (
 )
 
 func newServer(t *testing.T) string {
+	return newServerWith(t, server.Options{OpenSignup: true})
+}
+
+func newServerWith(t *testing.T, opts server.Options) string {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "hq.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	ts := httptest.NewServer(server.New(st))
+	ts := httptest.NewServer(server.New(st, opts))
 	t.Cleanup(ts.Close)
 	return ts.URL
 }
@@ -224,4 +228,50 @@ func TestValidation(t *testing.T) {
 	wantStatus(t, err, http.StatusBadRequest)
 	_, err = agent(t, url, tok.Token, "a1").CreateMessage(ctx, "   ")
 	wantStatus(t, err, http.StatusBadRequest)
+}
+
+func TestClosedSignupOnlyLetsAdminsCreateUsers(t *testing.T) {
+	ctx := context.Background()
+	url := newServerWith(t, server.Options{AdminToken: "admin-secret"})
+
+	_, err := (&client.Client{BaseURL: url}).Signup(ctx, "ada@example.com", "correct horse")
+	wantStatus(t, err, http.StatusForbidden)
+
+	_, err = (&client.Client{BaseURL: url, Token: "wrong"}).CreateUser(ctx, "ada@example.com", "correct horse")
+	wantStatus(t, err, http.StatusUnauthorized)
+
+	admin := &client.Client{BaseURL: url, Token: "admin-secret"}
+	u, err := admin.CreateUser(ctx, "ada@example.com", "correct horse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Email != "ada@example.com" {
+		t.Fatalf("created %+v", u)
+	}
+	_, err = admin.CreateUser(ctx, "ada@example.com", "correct horse")
+	wantStatus(t, err, http.StatusConflict)
+
+	// The new user logs in with the password the admin set.
+	if _, err := (&client.Client{BaseURL: url}).Login(ctx, "ada@example.com", "correct horse"); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+}
+
+func TestNoAdminTokenMeansNoAdmin(t *testing.T) {
+	url := newServerWith(t, server.Options{})
+	_, err := (&client.Client{BaseURL: url, Token: ""}).CreateUser(context.Background(), "ada@example.com", "correct horse")
+	wantStatus(t, err, http.StatusForbidden)
+	_, err = (&client.Client{BaseURL: url, Token: "anything"}).CreateUser(context.Background(), "ada@example.com", "correct horse")
+	wantStatus(t, err, http.StatusUnauthorized)
+}
+
+func TestHealth(t *testing.T) {
+	resp, err := http.Get(newServer(t) + "/up")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /up: %s", resp.Status)
+	}
 }
